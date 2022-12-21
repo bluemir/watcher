@@ -13,13 +13,14 @@ import (
 
 const (
 	describe        = ``
-	defaultLogLevel = logrus.WarnLevel
+	defaultLogLevel = logrus.InfoLevel
 )
 
 func Run() error {
 	conf := struct {
 		logLevel  int
 		logFormat string
+		logCaller bool
 	}{}
 
 	app := kingpin.New(buildinfo.AppName, describe)
@@ -34,8 +35,11 @@ func Run() error {
 		level := logrus.Level(conf.logLevel) + defaultLogLevel
 		logrus.SetOutput(os.Stderr)
 		logrus.SetLevel(level)
-		logrus.SetReportCaller(true)
 		logrus.Infof("logrus level: %s", level)
+
+		if logrus.GetLevel() > logrus.DebugLevel {
+			logrus.SetReportCaller(true)
+		}
 
 		switch conf.logFormat {
 		case "text-color":

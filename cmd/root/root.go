@@ -16,6 +16,12 @@ func Register(cmd *kingpin.Application) {
 
 	cmd.Flag("dry-run", "dry run").
 		BoolVar(&conf.DryRun)
+	cmd.Flag("include", "include pattern").
+		StringsVar(&conf.Includes)
+	cmd.Flag("exclude", "exclude pattern").
+		StringsVar(&conf.Excludes)
+	cmd.Arg("command", "command").
+		StringsVar(&conf.Args)
 
 	cmd.Action(func(*kingpin.ParseContext) error {
 		logrus.Trace("called")

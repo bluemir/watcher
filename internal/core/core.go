@@ -3,8 +3,9 @@ package core
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gobwas/glob"
@@ -21,40 +22,26 @@ type Config struct {
 	Includes []string
 	Excludes []string
 	Args     []string
+	Debounce time.Duration
+	Wait     time.Duration
 }
 
 func Run(ctx context.Context, conf *Config) error {
-	wd, err := os.Getwd()
+	// get target
+	targets, err := getTargets(conf.Includes, conf.Excludes)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	// get target
-	targets := []string{}
-	if err := filepath.WalkDir(wd, func(path string, d os.DirEntry, err error) error {
-		for _, pattern := range conf.Excludes {
-			p, err := glob.Compile(pattern)
-			if err != nil {
-				return err
-			}
-			if p.Match(path) {
-				return nil // next file
-			}
-		}
-		for _, pattern := range conf.Includes {
-			p, err := glob.Compile(pattern)
-			if err != nil {
-				return err
-			}
-			if p.Match(path) {
-				targets = append(targets, path)
-			}
-		}
+	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
-		return nil
-	}); err != nil {
-		return err
+	r, err := newRunner(ctx, conf.Args)
+	if err != nil {
+		return errors.WithStack(err)
 	}
-	logrus.Info(targets)
+
+	if err := r.Start(); err != nil {
+		return errors.WithStack(err)
+	}
 
 	// register inotify
 	watcher, err := fsnotify.NewWatcher()
@@ -67,51 +54,62 @@ func Run(ctx context.Context, conf *Config) error {
 		watcher.Add(t)
 	}
 
-	if len(conf.Args) < 1 {
-		return nil
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return nil
+			}
+
+			logrus.Info("modified file:", event.Name)
+			// TODO send sig term and wait...
+			// TODO debounce
+
+			logrus.Info("restart process")
+			if err := r.Restart(); err != nil {
+				return nil
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return nil
+			}
+			logrus.Info("error:", err)
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-
-	cmd := exec.CommandContext(ctx, conf.Args[0], conf.Args[1:]...)
-	cmd.Stdout = os.Stdout
-	if err := cmd.Start(); err != nil {
-		return err
+}
+func getTargets(includes []string, excludes []string) ([]string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, errors.WithStack(err)
 	}
-
-	errc := make(chan error)
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-
-				logrus.Info("modified file:", event.Name)
-				// TODO send sig term and wait...
-				if err := cmd.Process.Kill(); err != nil {
-					errc <- err
-					return
-				}
-				logrus.Info("restart process")
-
-				// TODO debounce
-				cmd = exec.CommandContext(ctx, conf.Args[0], conf.Args[1:]...)
-				cmd.Stdout = os.Stdout
-				if err := cmd.Start(); err != nil {
-					errc <- err
-					return
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				logrus.Info("error:", err)
-				errc <- err
-			case <-ctx.Done():
-				errc <- ctx.Err()
+	// get target
+	targets := []string{}
+	if err := filepath.WalkDir(wd, func(path string, d os.DirEntry, err error) error {
+		for _, pattern := range excludes {
+			p, err := glob.Compile(pattern)
+			if err != nil {
+				return err
+			}
+			if p.Match(path) {
+				return nil // next file
 			}
 		}
-	}()
+		for _, pattern := range includes {
+			p, err := glob.Compile(pattern)
+			if err != nil {
+				return err
+			}
+			if p.Match(path) {
+				targets = append(targets, path)
+			}
+		}
 
-	return <-errc
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return targets, nil
 }

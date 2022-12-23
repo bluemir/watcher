@@ -17,8 +17,10 @@ func Register(cmd *kingpin.Application) {
 	cmd.Flag("dry-run", "dry run").
 		BoolVar(&conf.DryRun)
 	cmd.Flag("include", "include pattern").
+		Short('i').
 		StringsVar(&conf.Includes)
 	cmd.Flag("exclude", "exclude pattern").
+		Short('e').
 		StringsVar(&conf.Excludes)
 	cmd.Flag("graceful-timeout", "graceful-timeout").
 		Default("1s").

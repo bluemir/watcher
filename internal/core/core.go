@@ -87,6 +87,10 @@ func getTargets(includes []string, excludes []string) ([]string, error) {
 	// get target
 	targets := []string{}
 	if err := filepath.WalkDir(wd, func(path string, d os.DirEntry, err error) error {
+		path, err = filepath.Rel(wd, path)
+		if err != nil {
+			return err
+		}
 		for _, pattern := range excludes {
 			p, err := glob.Compile(pattern)
 			if err != nil {

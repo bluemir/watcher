@@ -34,7 +34,7 @@ func Run(ctx context.Context, conf *Config) error {
 	}
 	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
-	r, err := newRunner(ctx, conf.Args)
+	r, err := newRunner(ctx, conf.Args, conf.Wait)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -62,7 +62,6 @@ func Run(ctx context.Context, conf *Config) error {
 			}
 
 			logrus.Info("modified file:", event.Name)
-			// TODO send sig term and wait...
 			// TODO debounce
 
 			logrus.Info("restart process")

@@ -20,6 +20,12 @@ func Register(cmd *kingpin.Application) {
 		StringsVar(&conf.Includes)
 	cmd.Flag("exclude", "exclude pattern").
 		StringsVar(&conf.Excludes)
+	cmd.Flag("graceful-timeout", "graceful-timeout").
+		Default("1s").
+		DurationVar(&conf.Wait)
+	cmd.Flag("debounce", "debonce").
+		Default("100ms").
+		DurationVar(&conf.Debounce)
 	cmd.Arg("command", "command").
 		StringsVar(&conf.Args)
 

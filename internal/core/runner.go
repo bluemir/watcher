@@ -27,10 +27,7 @@ type runner struct {
 func (r *runner) Kill() error {
 	return r.cmd.Process.Kill()
 }
-func (r *runner) Start() error {
-	return r.cmd.Start()
-}
-func (r *runner) Restart() error {
+func (r *runner) Exit() error {
 	// sigterm and wait
 	if err := r.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return err
@@ -44,6 +41,16 @@ func (r *runner) Restart() error {
 	}
 
 	if err := r.cmd.Process.Kill(); err != nil {
+		return err
+	}
+	return nil
+
+}
+func (r *runner) Start() error {
+	return r.cmd.Start()
+}
+func (r *runner) Restart() error {
+	if err := r.Exit(); err != nil {
 		return err
 	}
 

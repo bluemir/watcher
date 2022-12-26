@@ -1,10 +1,10 @@
 ##@ Run
 
 run: build/$(APP_NAME) ## Run application
-	$< -vv --include "**.go" -- echo 1
+	$< --help
 dev-run: build/$(APP_NAME) ## If detect file change, automatically rebuild.
 	while true; do \
-		$< --include "**.go" -- $(MAKE) test run; \
+		$< -x --include "**.go" -- $(MAKE) test run; \
 		echo "hit ^C again to quit" && sleep 1 \
 	; done
 

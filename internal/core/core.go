@@ -18,12 +18,13 @@ func NewConfig() *Config {
 }
 
 type Config struct {
-	DryRun   bool
-	Includes []string
-	Excludes []string
-	Args     []string
-	Debounce time.Duration
-	Wait     time.Duration
+	DryRun       bool
+	Includes     []string
+	Excludes     []string
+	Args         []string
+	Debounce     time.Duration
+	Wait         time.Duration
+	ExitOnChange bool
 }
 
 func Run(ctx context.Context, conf *Config) error {
@@ -54,6 +55,11 @@ func Run(ctx context.Context, conf *Config) error {
 		watcher.Add(t)
 	}
 
+	debouncer, err := newDebouncer(ctx, conf.Debounce)
+	if err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case event, ok := <-watcher.Events:
@@ -62,16 +68,25 @@ func Run(ctx context.Context, conf *Config) error {
 			}
 
 			logrus.Info("modified file:", event.Name)
-			// TODO debounce
+			debouncer.Call(func() error {
+				if conf.ExitOnChange {
+					logrus.Info("exit")
+					return r.Exit()
+				}
 
-			logrus.Info("restart process")
-			if err := r.Restart(); err != nil {
+				logrus.Info("restart process")
+				if err := r.Restart(); err != nil {
+					return err
+				}
 				return nil
-			}
+			})
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
+			logrus.Info("error:", err)
+			return err
+		case <-debouncer.Err():
 			logrus.Info("error:", err)
 			return err
 		case <-ctx.Done():

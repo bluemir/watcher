@@ -28,6 +28,9 @@ func Register(cmd *kingpin.Application) {
 	cmd.Flag("debounce", "debonce").
 		Default("100ms").
 		DurationVar(&conf.Debounce)
+	cmd.Flag("exit-on-change", "exit on file change").
+		Short('x').
+		BoolVar(&conf.ExitOnChange)
 	cmd.Arg("command", "command").
 		StringsVar(&conf.Args)
 

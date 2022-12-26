@@ -3,19 +3,22 @@ package core
 import (
 	"context"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 func newDebouncer(ctx context.Context, d time.Duration) (*Debouncer, error) {
-	return &Debouncer{
-		ctx:     ctx,
+	deb := &Debouncer{
 		timeout: d,
-		timer:   nil,
+		timer:   time.NewTimer(d),
 		err:     make(chan error),
-	}, nil
+	}
+	go deb.run(ctx)
+
+	return deb, nil
 }
 
 type Debouncer struct {
-	ctx     context.Context
 	fn      func() error
 	timer   *time.Timer
 	timeout time.Duration
@@ -23,25 +26,24 @@ type Debouncer struct {
 }
 
 func (d *Debouncer) Call(fn func() error) {
-	if d.timer == nil {
-		d.timer = time.NewTimer(d.timeout)
-	} else {
-		d.timer.Reset(d.timeout)
-	}
+	logrus.Debug("debouncer called")
+
+	d.timer.Reset(d.timeout)
 	d.fn = fn
 }
-func (d *Debouncer) run() {
+func (d *Debouncer) run(ctx context.Context) {
 	for {
 		select {
 		case <-d.timer.C:
-			if d.fn != nil {
-				return
+			logrus.Debug("timer triggered")
+			if d.fn == nil {
+				continue
 			}
 			if err := d.fn(); err != nil {
 				d.err <- err
 				return
 			}
-		case <-d.ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}

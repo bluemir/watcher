@@ -71,7 +71,10 @@ func Run(ctx context.Context, conf *Config) error {
 			debouncer.Call(func() error {
 				if conf.ExitOnChange {
 					logrus.Info("exit")
-					return r.Exit()
+					if err := r.Exit(); err != nil {
+						return err
+					}
+					os.Exit(0)
 				}
 
 				logrus.Info("restart process")

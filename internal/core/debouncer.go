@@ -2,50 +2,50 @@ package core
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
 func newDebouncer(ctx context.Context, d time.Duration) (*Debouncer, error) {
+	logrus.Debug(d)
 	deb := &Debouncer{
-		timeout: d,
-		timer:   time.NewTimer(d),
 		err:     make(chan error),
+		timeout: d,
 	}
-	go deb.run(ctx)
 
 	return deb, nil
 }
 
 type Debouncer struct {
-	fn      func() error
+	sync.Mutex
+
 	timer   *time.Timer
 	timeout time.Duration
+	fn      func() error
 	err     chan error
 }
 
 func (d *Debouncer) Call(fn func() error) {
-	logrus.Debug("debouncer called")
+	logrus.Debug("debouncer called", time.Now())
 
-	d.timer.Reset(d.timeout)
+	d.Lock()
+	defer d.Unlock()
+
 	d.fn = fn
+
+	if d.timer != nil {
+		d.timer.Reset(d.timeout)
+	} else {
+		d.timer = time.AfterFunc(d.timeout, d.do)
+	}
 }
-func (d *Debouncer) run(ctx context.Context) {
-	for {
-		select {
-		case <-d.timer.C:
-			logrus.Debug("timer triggered")
-			if d.fn == nil {
-				continue
-			}
-			if err := d.fn(); err != nil {
-				d.err <- err
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
+
+func (d *Debouncer) do() {
+	logrus.Debug("debouncer triggered", time.Now())
+	if err := d.fn(); err != nil {
+		d.err <- err
 	}
 }
 func (d *Debouncer) Err() <-chan error {

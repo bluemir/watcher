@@ -4,7 +4,7 @@ run: build/$(APP_NAME) ## Run application
 	$< --help
 dev-run: build/$(APP_NAME) ## If detect file change, automatically rebuild.
 	while true; do \
-		$< -vv -x --include "**.go" -- $(MAKE) test run; \
+		$< -vv --include "**.go" -- $(MAKE) test run; \
 		echo "hit ^C again to quit" && sleep 1 \
 	; done
 

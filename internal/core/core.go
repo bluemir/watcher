@@ -28,6 +28,12 @@ type Config struct {
 }
 
 func Run(ctx context.Context, conf *Config) error {
+	logrus.Infof("wait on exit: %s", conf.Wait)
+	logrus.Infof("debounce: %s", conf.Debounce)
+
+	if conf.DryRun {
+		logrus.Warn("dry run")
+	}
 	// get target
 	targets, err := getTargets(conf.Includes, conf.Excludes)
 	if err != nil {
@@ -35,7 +41,7 @@ func Run(ctx context.Context, conf *Config) error {
 	}
 	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
-	r, err := newRunner(ctx, conf.Args, conf.Wait)
+	r, err := newRunner(ctx, conf.Args, conf.Wait, conf.DryRun)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -64,11 +70,13 @@ func Run(ctx context.Context, conf *Config) error {
 		select {
 		case event, ok := <-watcher.Events:
 			if !ok {
+				logrus.Debug("event chan closed")
 				return nil
 			}
 
 			logrus.Info("modified file:", event.Name)
 			debouncer.Call(func() error {
+				logrus.Debug(time.Now().String())
 				if conf.ExitOnChange {
 					logrus.Info("exit")
 					if err := r.Exit(); err != nil {
@@ -81,10 +89,17 @@ func Run(ctx context.Context, conf *Config) error {
 				if err := r.Restart(); err != nil {
 					return err
 				}
+				logrus.Debug("process restarted..")
+
+				// rewatch file
+				watcher.Add(event.Name)
+
 				return nil
 			})
+
 		case err, ok := <-watcher.Errors:
 			if !ok {
+				logrus.Debug("watcher error chan closed")
 				return nil
 			}
 			logrus.Info("error:", err)
@@ -93,6 +108,7 @@ func Run(ctx context.Context, conf *Config) error {
 			logrus.Info("error:", err)
 			return err
 		case <-ctx.Done():
+			logrus.Info("context done:", ctx.Err())
 			return ctx.Err()
 		}
 	}

@@ -28,6 +28,9 @@ type Config struct {
 }
 
 func Run(ctx context.Context, conf *Config) error {
+	if err := conf.Validate(); err != nil {
+		return err
+	}
 	logrus.Infof("wait on exit: %s", conf.Wait)
 	logrus.Infof("debounce: %s", conf.Debounce)
 
@@ -149,4 +152,10 @@ func getTargets(includes []string, excludes []string) ([]string, error) {
 		return nil, err
 	}
 	return targets, nil
+}
+func (conf *Config) Validate() error {
+	if len(conf.Args) == 0 {
+		return errors.New("Empty args")
+	}
+	return nil
 }

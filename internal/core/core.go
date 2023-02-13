@@ -77,9 +77,22 @@ func Run(ctx context.Context, conf *Config) error {
 				return nil
 			}
 
-			logrus.Info("modified file:", event.Name)
+			logrus.Infof("modified file: %s", event.Name)
 			debouncer.Call(func() error {
 				logrus.Debug(time.Now().String())
+				// check match exclude pattern
+
+				for _, pattern := range conf.Excludes {
+					p, err := glob.Compile(pattern)
+					if err != nil {
+						return err
+					}
+					if p.Match(event.Name) {
+						logrus.Infof("ingore. match exclude pattern: %s", pattern)
+						return nil
+					}
+				}
+
 				if conf.ExitOnChange {
 					logrus.Info("exit")
 					if err := r.Exit(); err != nil {

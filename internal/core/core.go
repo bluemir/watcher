@@ -2,7 +2,10 @@ package core
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +31,7 @@ type Config struct {
 	Debounce     time.Duration
 	Wait         time.Duration
 	ExitOnChange bool
+	ContentCheck bool
 }
 
 func Run(ctx context.Context, conf *Config) error {
@@ -67,6 +71,8 @@ func Run(ctx context.Context, conf *Config) error {
 		watcher.Add(t)
 	}
 
+	hashes := map[string]string{}
+
 	debouncer, err := newDebouncer(ctx, conf.Debounce)
 	if err != nil {
 		return err
@@ -93,6 +99,18 @@ func Run(ctx context.Context, conf *Config) error {
 					if p.Match(event.Name) {
 						logrus.Infof("ingore. match exclude pattern: %s", pattern)
 						return nil
+					}
+				}
+
+				if conf.ContentCheck {
+					hash, err := hashFile(event.Name)
+					if err != nil {
+						logrus.Debugf("failed to hash file: %s: %v", event.Name, err)
+					} else if hashes[event.Name] == hash {
+						logrus.Infof("skip. content not changed: %s", event.Name)
+						return nil
+					} else {
+						hashes[event.Name] = hash
 					}
 				}
 
@@ -172,6 +190,20 @@ func getTargets(includes []string, excludes []string) ([]string, error) {
 	}
 	return targets, nil
 }
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func (conf *Config) Validate() error {
 	if len(conf.Args) == 0 {
 		return pkgerrors.New("Empty args")

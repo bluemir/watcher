@@ -20,6 +20,7 @@ func newDebouncer(ctx context.Context, d time.Duration) (*Debouncer, error) {
 
 type Debouncer struct {
 	sync.Mutex
+	doMu sync.Mutex
 
 	timer   *time.Timer
 	timeout time.Duration
@@ -43,8 +44,15 @@ func (d *Debouncer) Call(fn func() error) {
 }
 
 func (d *Debouncer) do() {
+	d.doMu.Lock()
+	defer d.doMu.Unlock()
+
+	d.Lock()
+	fn := d.fn
+	d.Unlock()
+
 	logrus.Debug("debouncer triggered", time.Now())
-	if err := d.fn(); err != nil {
+	if err := fn(); err != nil {
 		d.err <- err
 	}
 }

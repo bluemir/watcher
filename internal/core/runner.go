@@ -29,10 +29,12 @@ type runner struct {
 }
 
 func (r *runner) Kill() error {
+	if r.cmd.Process == nil {
+		return nil
+	}
 	return r.cmd.Process.Kill()
 }
 func (r *runner) Exit() error {
-	// sigterm and wait
 	if r.cmd.Process == nil {
 		logrus.Debug("process not started")
 		return nil
@@ -41,19 +43,23 @@ func (r *runner) Exit() error {
 		return err
 	}
 
+	done := make(chan error, 1)
+	go func() {
+		done <- r.cmd.Wait()
+	}()
+
 	select {
+	case <-done:
+		return nil
 	case <-time.After(r.timeout):
-		break
+		if err := r.cmd.Process.Kill(); err != nil {
+			logrus.Error(err)
+		}
+		<-done
+		return nil
 	case <-r.ctx.Done():
 		return r.ctx.Err()
 	}
-
-	if err := r.cmd.Process.Kill(); err != nil {
-		logrus.Error(err)
-		return err
-	}
-	return nil
-
 }
 func (r *runner) Start() error {
 	if r.dryRun {

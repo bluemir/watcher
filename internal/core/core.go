@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,9 +10,11 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gobwas/glob"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+var errExitOnChange = errors.New("exit on change")
 
 func NewConfig() *Config {
 	return &Config{}
@@ -40,17 +43,17 @@ func Run(ctx context.Context, conf *Config) error {
 	// get target
 	targets, err := getTargets(conf.Includes, conf.Excludes)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
 	r, err := newRunner(ctx, conf.Args, conf.Wait, conf.DryRun)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	if err := r.Start(); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	// register inotify
@@ -98,7 +101,7 @@ func Run(ctx context.Context, conf *Config) error {
 					if err := r.Exit(); err != nil {
 						return err
 					}
-					os.Exit(0)
+					return errExitOnChange
 				}
 
 				logrus.Info("restart process")
@@ -120,9 +123,12 @@ func Run(ctx context.Context, conf *Config) error {
 			}
 			logrus.Info("error:", err)
 			return err
-		case <-debouncer.Err():
-			logrus.Info("error:", err)
-			return err
+		case dErr := <-debouncer.Err():
+			if errors.Is(dErr, errExitOnChange) {
+				return nil
+			}
+			logrus.Info("error:", dErr)
+			return dErr
 		case <-ctx.Done():
 			logrus.Info("context done:", ctx.Err())
 			return ctx.Err()
@@ -132,7 +138,7 @@ func Run(ctx context.Context, conf *Config) error {
 func getTargets(includes []string, excludes []string) ([]string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	// get target
 	targets := []string{}
@@ -168,7 +174,7 @@ func getTargets(includes []string, excludes []string) ([]string, error) {
 }
 func (conf *Config) Validate() error {
 	if len(conf.Args) == 0 {
-		return errors.New("Empty args")
+		return pkgerrors.New("Empty args")
 	}
 	return nil
 }

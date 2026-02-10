@@ -16,6 +16,18 @@ const (
 	defaultLogLevel = logrus.InfoLevel
 )
 
+type prefixFormatter struct {
+	logrus.Formatter
+}
+
+func (f *prefixFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	b, err := f.Formatter.Format(entry)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte("[watcher] "), b...), nil
+}
+
 func Run() error {
 	conf := struct {
 		logLevel  int
@@ -54,6 +66,7 @@ func Run() error {
 			return errors.Errorf("unknown log format")
 		}
 
+		logrus.SetFormatter(&prefixFormatter{Formatter: logrus.StandardLogger().Formatter})
 		return nil
 	})
 

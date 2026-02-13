@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gobwas/glob"
 	pkgerrors "github.com/pkg/errors"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/sirupsen/logrus"
 )
 
@@ -71,7 +73,8 @@ func Run(ctx context.Context, conf *Config) error {
 		watcher.Add(t)
 	}
 
-	hashes := map[string]string{}
+	prevContents := map[string][]byte{}
+	prevHashes := map[string]string{}
 
 	debouncer, err := newDebouncer(ctx, conf.Debounce)
 	if err != nil {
@@ -103,14 +106,37 @@ func Run(ctx context.Context, conf *Config) error {
 				}
 
 				if conf.ContentCheck {
-					hash, err := hashFile(event.Name)
+					fi, err := os.Stat(event.Name)
 					if err != nil {
-						logrus.Debugf("failed to hash file: %s: %v", event.Name, err)
-					} else if hashes[event.Name] == hash {
-						logrus.Infof("skip. content not changed: %s", event.Name)
-						return nil
+						logrus.Debugf("failed to stat file: %s: %v", event.Name, err)
+					} else if fi.Size() > 1<<20 {
+						// large file: hash-based check only
+						hash, err := hashFile(event.Name)
+						if err != nil {
+							logrus.Debugf("failed to hash file: %s: %v", event.Name, err)
+						} else if prevHashes[event.Name] == hash {
+							logrus.Infof("skip. content not changed: %s", event.Name)
+							return nil
+						} else {
+							if prevHashes[event.Name] != "" {
+								logrus.Debugf("content changed: %s (file too large to diff)", event.Name)
+							}
+							prevHashes[event.Name] = hash
+						}
 					} else {
-						hashes[event.Name] = hash
+						// small file: content-based check with diff
+						newContent, err := os.ReadFile(event.Name)
+						if err != nil {
+							logrus.Debugf("failed to read file: %s: %v", event.Name, err)
+						} else if old, ok := prevContents[event.Name]; ok && bytes.Equal(old, newContent) {
+							logrus.Infof("skip. content not changed: %s", event.Name)
+							return nil
+						} else {
+							if ok {
+								logrus.Debugf("content changed: %s\n%s", event.Name, fileDiff(old, newContent, 10))
+							}
+							prevContents[event.Name] = newContent
+						}
 					}
 				}
 
@@ -202,6 +228,23 @@ func hashFile(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func fileDiff(oldContent, newContent []byte, maxLines int) string {
+	diff := difflib.UnifiedDiff{
+		A:       difflib.SplitLines(string(oldContent)),
+		B:       difflib.SplitLines(string(newContent)),
+		Context: 3,
+	}
+	result, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		return ""
+	}
+	lines := strings.SplitN(result, "\n", maxLines+1)
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (conf *Config) Validate() error {

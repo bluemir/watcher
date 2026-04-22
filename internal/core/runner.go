@@ -28,18 +28,26 @@ type runner struct {
 	dryRun  bool
 }
 
-func (r *runner) Kill() error {
+// signalGroup sends sig to the child's entire process group so that
+// grandchildren (e.g. a Go server's own subprocesses) are included.
+// Returns nil silently if the child has not been started yet.
+func (r *runner) signalGroup(sig syscall.Signal) error {
 	if r.cmd.Process == nil {
 		return nil
 	}
-	return r.cmd.Process.Kill()
+	// Negative pid means "process group with pgid=pid" (set by Setpgid in prepareCmd).
+	return syscall.Kill(-r.cmd.Process.Pid, sig)
+}
+
+func (r *runner) Kill() error {
+	return r.signalGroup(syscall.SIGKILL)
 }
 func (r *runner) Exit() error {
 	if r.cmd.Process == nil {
 		logrus.Debug("process not started")
 		return nil
 	}
-	if err := r.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+	if err := r.signalGroup(syscall.SIGTERM); err != nil {
 		return err
 	}
 
@@ -52,7 +60,7 @@ func (r *runner) Exit() error {
 	case <-done:
 		return nil
 	case <-time.After(r.timeout):
-		if err := r.cmd.Process.Kill(); err != nil {
+		if err := r.signalGroup(syscall.SIGKILL); err != nil {
 			logrus.Error(err)
 		}
 		<-done
@@ -86,6 +94,10 @@ func prepareCmd(ctx context.Context, args []string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
+	// Put the child in its own process group. On restart/exit we signal
+	// the whole group (-pgid), so grandchildren like llama-server and
+	// python subprocesses are torn down with the parent instead of being
+	// left as orphans.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
 }

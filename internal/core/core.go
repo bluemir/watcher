@@ -61,6 +61,14 @@ func Run(ctx context.Context, conf *Config) error {
 	if err := r.Start(); err != nil {
 		return pkgerrors.WithStack(err)
 	}
+	// Ensure the child's process group is torn down on every exit path
+	// (ctx cancel, error, normal return). Without this, grandchildren
+	// leak when the watcher itself is Ctrl+C'd.
+	defer func() {
+		if err := r.Exit(); err != nil {
+			logrus.Debugf("runner exit: %v", err)
+		}
+	}()
 
 	// register inotify
 	watcher, err := fsnotify.NewWatcher()

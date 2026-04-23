@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"syscall"
@@ -30,13 +31,27 @@ type runner struct {
 
 // signalGroup sends sig to the child's entire process group so that
 // grandchildren (e.g. a Go server's own subprocesses) are included.
-// Returns nil silently if the child has not been started yet.
+// Returns nil silently if the child has not been started yet, or if the
+// group is already gone. If the group signal fails with EPERM (e.g. a
+// member changed session or escalated to another uid), falls back to
+// signaling just the direct child so the restart loop can make progress.
 func (r *runner) signalGroup(sig syscall.Signal) error {
 	if r.cmd.Process == nil {
 		return nil
 	}
 	// Negative pid means "process group with pgid=pid" (set by Setpgid in prepareCmd).
-	return syscall.Kill(-r.cmd.Process.Pid, sig)
+	err := syscall.Kill(-r.cmd.Process.Pid, sig)
+	if err == nil || errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	if errors.Is(err, syscall.EPERM) {
+		logrus.Warnf("kill process group %d with %s denied (EPERM); falling back to direct child", r.cmd.Process.Pid, sig)
+		if perr := r.cmd.Process.Signal(sig); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
+			return perr
+		}
+		return nil
+	}
+	return err
 }
 
 func (r *runner) Kill() error {

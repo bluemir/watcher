@@ -22,9 +22,9 @@ func Register(cmd *kingpin.Application) {
 	cmd.Flag("exclude", "exclude pattern").
 		Short('e').
 		StringsVar(&conf.Excludes)
-	cmd.Flag("graceful-timeout", "graceful-timeout").
+	cmd.Flag("graceful-timeout", "wait this long for the child to exit after SIGTERM before sending SIGKILL").
 		Default("1s").
-		DurationVar(&conf.Wait)
+		DurationVar(&conf.GracefulTimeout)
 	cmd.Flag("debounce", "debonce").
 		Default("100ms").
 		DurationVar(&conf.Debounce)

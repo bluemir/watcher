@@ -31,7 +31,7 @@ type Config struct {
 	Excludes     []string
 	Args         []string
 	Debounce     time.Duration
-	Wait         time.Duration
+	GracefulTimeout time.Duration
 	ExitOnChange bool
 	ContentCheck bool
 }
@@ -40,7 +40,7 @@ func Run(ctx context.Context, conf *Config) error {
 	if err := conf.Validate(); err != nil {
 		return err
 	}
-	logrus.Infof("wait on exit: %s", conf.Wait)
+	logrus.Infof("graceful timeout: %s", conf.GracefulTimeout)
 	logrus.Infof("debounce: %s", conf.Debounce)
 
 	if conf.DryRun {
@@ -53,7 +53,7 @@ func Run(ctx context.Context, conf *Config) error {
 	}
 	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
-	r, err := newRunner(ctx, conf.Args, conf.Wait, conf.DryRun)
+	r, err := newRunner(ctx, conf.Args, conf.GracefulTimeout, conf.DryRun)
 	if err != nil {
 		return pkgerrors.WithStack(err)
 	}

@@ -11,22 +11,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func newRunner(ctx context.Context, args []string, timeout time.Duration, dryRun bool) (*runner, error) {
+func newRunner(ctx context.Context, args []string, gracefulTimeout time.Duration, dryRun bool) (*runner, error) {
 	return &runner{
-		ctx:     ctx,
-		cmd:     prepareCmd(ctx, args),
-		args:    args,
-		timeout: timeout,
-		dryRun:  dryRun,
+		ctx:             ctx,
+		cmd:             prepareCmd(ctx, args),
+		args:            args,
+		gracefulTimeout: gracefulTimeout,
+		dryRun:          dryRun,
 	}, nil
 }
 
 type runner struct {
-	ctx     context.Context
-	cmd     *exec.Cmd
-	args    []string
-	timeout time.Duration
-	dryRun  bool
+	ctx             context.Context
+	cmd             *exec.Cmd
+	args            []string
+	gracefulTimeout time.Duration
+	dryRun          bool
 }
 
 // signalGroup sends sig to the child's entire process group so that
@@ -74,7 +74,7 @@ func (r *runner) Exit() error {
 	select {
 	case <-done:
 		return nil
-	case <-time.After(r.timeout):
+	case <-time.After(r.gracefulTimeout):
 		if err := r.signalGroup(syscall.SIGKILL); err != nil {
 			logrus.Error(err)
 		}

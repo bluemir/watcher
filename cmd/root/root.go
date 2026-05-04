@@ -25,7 +25,7 @@ func Register(cmd *kingpin.Application) {
 	cmd.Flag("graceful-timeout", "wait this long for the child to exit after SIGTERM before sending SIGKILL").
 		Default("1s").
 		DurationVar(&conf.GracefulTimeout)
-	cmd.Flag("debounce", "debonce").
+	cmd.Flag("debounce", "coalesce file events within this window before reacting").
 		Default("100ms").
 		DurationVar(&conf.Debounce)
 	cmd.Flag("exit-on-change", "exit on file change").

@@ -107,7 +107,7 @@ func Run(ctx context.Context, conf *Config) error {
 						return err
 					}
 					if p.Match(event.Name) {
-						logrus.Infof("ingore. match exclude pattern: %s", pattern)
+						logrus.Infof("ignore. match exclude pattern: %s", pattern)
 						return nil
 					}
 				}

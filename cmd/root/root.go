@@ -6,7 +6,7 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/alecthomas/kingpin/v2"
 
 	"github.com/bluemir/watcher/internal/core"
 )

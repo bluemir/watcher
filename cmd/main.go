@@ -3,9 +3,9 @@ package cmd
 import (
 	"os"
 
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/alecthomas/kingpin/v2"
+	"github.com/cockroachdb/errors"
+	"github.com/sirupsen/logrus"
 
 	rootCmd "github.com/bluemir/watcher/cmd/root"
 	"github.com/bluemir/watcher/internal/buildinfo"

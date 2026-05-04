@@ -2,12 +2,12 @@ package core
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -47,11 +47,11 @@ func (r *runner) signalGroup(sig syscall.Signal) error {
 	if errors.Is(err, syscall.EPERM) {
 		logrus.Warnf("kill process group %d with %s denied (EPERM); falling back to direct child", r.cmd.Process.Pid, sig)
 		if perr := r.cmd.Process.Signal(sig); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			return perr
+			return errors.WithStack(perr)
 		}
 		return nil
 	}
-	return err
+	return errors.WithStack(err)
 }
 
 func (r *runner) Kill() error {
@@ -81,7 +81,7 @@ func (r *runner) Exit() error {
 		<-done
 		return nil
 	case <-r.ctx.Done():
-		return r.ctx.Err()
+		return errors.WithStack(r.ctx.Err())
 	}
 }
 func (r *runner) Start() error {
@@ -89,21 +89,16 @@ func (r *runner) Start() error {
 		logrus.Warn("dry run", r.args)
 		return nil
 	}
-	return r.cmd.Start()
+	return errors.WithStack(r.cmd.Start())
 }
 func (r *runner) Restart() error {
 	if err := r.Exit(); err != nil {
-		logrus.Error(err)
 		return err
 	}
 	logrus.Debug("exited")
 
 	r.cmd = prepareCmd(r.ctx, r.args)
-	if err := r.Start(); err != nil {
-		logrus.Error(err)
-		return err
-	}
-	return nil
+	return r.Start()
 }
 func prepareCmd(ctx context.Context, args []string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)

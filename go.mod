@@ -9,6 +9,7 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/sirupsen/logrus v1.9.4
+	golang.org/x/term v0.42.0
 )
 
 require (

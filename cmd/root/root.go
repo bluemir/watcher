@@ -34,6 +34,9 @@ func Register(cmd *kingpin.Application) {
 	cmd.Flag("content-check", "skip restart if file content not changed").
 		Short('c').
 		BoolVar(&conf.ContentCheck)
+	cmd.Flag("interactive", "enable single-key controls on stdin (r=restart, q=quit, h=help)").
+		Short('I').
+		BoolVar(&conf.Interactive)
 	cmd.Arg("command", "command").
 		StringsVar(&conf.Args)
 

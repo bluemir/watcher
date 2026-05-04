@@ -16,6 +16,7 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/term"
 )
 
 var errExitOnChange = errors.New("exit on change")
@@ -25,14 +26,15 @@ func NewConfig() *Config {
 }
 
 type Config struct {
-	DryRun       bool
-	Includes     []string
-	Excludes     []string
-	Args         []string
-	Debounce     time.Duration
+	DryRun          bool
+	Includes        []string
+	Excludes        []string
+	Args            []string
+	Debounce        time.Duration
 	GracefulTimeout time.Duration
-	ExitOnChange bool
-	ContentCheck bool
+	ExitOnChange    bool
+	ContentCheck    bool
+	Interactive     bool
 }
 
 func Run(ctx context.Context, conf *Config) error {
@@ -44,6 +46,25 @@ func Run(ctx context.Context, conf *Config) error {
 
 	if conf.DryRun {
 		logrus.Warn("dry run")
+	}
+
+	var keys <-chan byte
+	if conf.Interactive {
+		fd := int(os.Stdin.Fd())
+		if !term.IsTerminal(fd) {
+			return errors.New("interactive mode requires a tty on stdin")
+		}
+		oldState, err := term.MakeRaw(fd)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		defer func() {
+			if err := term.Restore(fd, oldState); err != nil {
+				logrus.Warnf("restore terminal: %v", err)
+			}
+		}()
+		keys = listenKeys(ctx, os.Stdin)
+		logrus.Info("interactive mode: r=restart, q=quit, h=help")
 	}
 	// get target
 	targets, err := getTargets(conf.Includes, conf.Excludes)
@@ -178,6 +199,23 @@ func Run(ctx context.Context, conf *Config) error {
 				return nil
 			}
 			return errors.WithStack(dErr)
+		case key, ok := <-keys:
+			if !ok {
+				keys = nil // disable case so closed channel doesn't busy-loop
+				continue
+			}
+			switch key {
+			case 'r':
+				logrus.Info("restart (key)")
+				if err := r.Restart(); err != nil {
+					return errors.WithStack(err)
+				}
+			case 'q', 3: // 'q' or Ctrl+C in raw mode
+				logrus.Info("quit (key)")
+				return nil
+			case 'h':
+				logrus.Info("keys: r=restart, q=quit, h=help")
+			}
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())
 		}

@@ -49,6 +49,10 @@ func Run(ctx context.Context, conf *Config) error {
 	}
 
 	var keys <-chan byte
+	var hintTickC <-chan time.Time
+	var tracker *activityTracker
+	var stdout, stderr io.Writer = os.Stdout, os.Stderr
+	const hintAfter = 10 * time.Second
 	if conf.Interactive {
 		fd := int(os.Stdin.Fd())
 		if !term.IsTerminal(fd) {
@@ -64,6 +68,12 @@ func Run(ctx context.Context, conf *Config) error {
 			}
 		}()
 		keys = listenKeys(ctx, os.Stdin)
+		tracker = newActivityTracker()
+		stdout = tracker.Wrap(os.Stdout)
+		stderr = tracker.Wrap(os.Stderr)
+		hintTicker := time.NewTicker(hintAfter / 5)
+		defer hintTicker.Stop()
+		hintTickC = hintTicker.C
 		logrus.Info("interactive mode: r=restart, q=quit, h=help")
 	}
 	// get target
@@ -73,7 +83,7 @@ func Run(ctx context.Context, conf *Config) error {
 	}
 	logrus.Infof("targets: \n%s", strings.Join(targets, "\n"))
 
-	r, err := newRunner(ctx, conf.Args, conf.GracefulTimeout, conf.DryRun)
+	r, err := newRunner(ctx, conf.Args, conf.GracefulTimeout, conf.DryRun, stdout, stderr)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -103,6 +113,7 @@ func Run(ctx context.Context, conf *Config) error {
 
 	prevContents := map[string][]byte{}
 	prevHashes := map[string]string{}
+	hintShown := false
 
 	debouncer, err := newDebouncer(ctx, conf.Debounce)
 	if err != nil {
@@ -215,6 +226,15 @@ func Run(ctx context.Context, conf *Config) error {
 				return nil
 			case 'h':
 				logrus.Info("keys: r=restart, q=quit, h=help")
+			}
+		case <-hintTickC:
+			if time.Since(tracker.Last()) >= hintAfter {
+				if !hintShown {
+					logrus.Info("keys: r=restart, q=quit, h=help")
+					hintShown = true
+				}
+			} else {
+				hintShown = false
 			}
 		case <-ctx.Done():
 			return errors.WithStack(ctx.Err())

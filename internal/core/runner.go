@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"syscall"
@@ -11,14 +12,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func newRunner(ctx context.Context, args []string, gracefulTimeout time.Duration, dryRun bool) (*runner, error) {
-	return &runner{
+func newRunner(ctx context.Context, args []string, gracefulTimeout time.Duration, dryRun bool, stdout, stderr io.Writer) (*runner, error) {
+	r := &runner{
 		ctx:             ctx,
-		cmd:             prepareCmd(ctx, args),
 		args:            args,
 		gracefulTimeout: gracefulTimeout,
 		dryRun:          dryRun,
-	}, nil
+		stdout:          stdout,
+		stderr:          stderr,
+	}
+	r.cmd = r.prepareCmd()
+	return r, nil
 }
 
 type runner struct {
@@ -27,6 +31,8 @@ type runner struct {
 	args            []string
 	gracefulTimeout time.Duration
 	dryRun          bool
+	stdout          io.Writer
+	stderr          io.Writer
 }
 
 // signalGroup sends sig to the child's entire process group so that
@@ -97,13 +103,13 @@ func (r *runner) Restart() error {
 	}
 	logrus.Debug("exited")
 
-	r.cmd = prepareCmd(r.ctx, r.args)
+	r.cmd = r.prepareCmd()
 	return r.Start()
 }
-func prepareCmd(ctx context.Context, args []string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+func (r *runner) prepareCmd() *exec.Cmd {
+	cmd := exec.CommandContext(r.ctx, r.args[0], r.args[1:]...)
+	cmd.Stdout = r.stdout
+	cmd.Stderr = r.stderr
 	// Put the child in its own process group. On restart/exit we signal
 	// the whole group (-pgid), so grandchildren like llama-server and
 	// python subprocesses are torn down with the parent instead of being
